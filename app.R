@@ -16,10 +16,13 @@ library(plotly)
 gs4_auth(cache = ".secrets",
          email = TRUE)
 
-ui <- dashboardPage(dark = NULL,
+ui <- dashboardPage(
+  dark = NULL,
   title = "Home Expense Dashboard",
   dashboardHeader(status = "gray-dark"),
-  dashboardSidebar(status = "olive", minified = F,
+  dashboardSidebar(
+    status = "olive",
+    minified = F,
     sidebarMenu(
       id = "tabs",
       menuItem(
@@ -89,7 +92,9 @@ ui <- dashboardPage(dark = NULL,
       # Second tab content
       tabItem(
         tabName = "table",
-        box(solidHeader = T, title = "Monthly Expense Details",
+        box(
+          solidHeader = T,
+          title = "Monthly Expense Details",
           status = "info",
           width = 12,
           selectInput(
@@ -161,7 +166,9 @@ ui <- dashboardPage(dark = NULL,
       tabItem(
         tabName = "upload",
         
-        box(title = "Preview Data", solidHeader = T,
+        box(
+          title = "Preview Data",
+          solidHeader = T,
           width = 12,
           status = "info",
           dataTableOutput(outputId = "preview"),
@@ -182,88 +189,93 @@ ui <- dashboardPage(dark = NULL,
 
 
 server <- function(input, output, session) {
-  shinyalert("Welcome!",
-             "Click on Fetch/Refresh button to get the latest data.",
-             type = "info",showConfirmButton = T,confirmButtonCol = "#5C8374")
+  shinyalert(
+    "Welcome!",
+    "Click on Fetch/Refresh button to get the latest data.",
+    type = "info",
+    showConfirmButton = T,
+    confirmButtonCol = "#5C8374"
+  )
   disable("add")
   onclick("preview", enable("add"))
   onclick("add", disable("add"))
   
   #  Retrieve excel sheet data ----------------------------------------------
+  sheet_data <- reactiveVal(data.frame(
+    "Date" = Date(length = 0L),
+    "Item" = character(0),
+    "Price" = integer(0)
+  ))
   
-  sheet_data0 <- function() {
+  observeEvent(input$refresh, {
     form = tryCatch({
       gs4_get(
         'https://docs.google.com/spreadsheets/d/16MP7ohlNQpgKG0fvEQifpGPEqWkMnTPQBb5sO9H2Qak/edit?usp=sharing'
       )
     }, error = function(e) {
-      shinyalert("Oops!",
-                 "Unable to fetch data! Please try again",
-                 type = "error",confirmButtonCol = "#5C8374")
+      shinyalert(
+        "Oops!",
+        "Unable to fetch data! Please try again",
+        type = "error",
+        confirmButtonCol = "#5C8374"
+      )
       NULL
     })
     
-    if (is.null(form)) {
-      return(data.frame(
-        "Date" = Date(length = 0L),
-        "Item" = character(0),
-        "Price" = integer(0)
-      ))
-    }
-    else{
+    if (!is.null(form)) {
       data <- read_sheet(form)
       data[[1]] <- as.Date(data[[1]])
-      return(data)
+      sheet_data(data)
     }
-  }
-  
-  sheet_data <- reactive({
-    input$refresh
-    sheet_data0()
   })
   
   # Tab 1 codes -------------------------------------------------------------
   
   # Refresh button --- Refreshes the entire dashboard
-  observeEvent(input$refresh, {
-    #Expense bar plot
-    output$item_expense <- renderPlot({
-      month_data <-
-        sheet_data()[months(sheet_data()[[1]]) %in% input$month,]
-      if (nrow(month_data) == 0) {
-        NULL
-      }
-      else{
-        total_expense <-
-          aggregate(month_data[[3]],
-                    by = list(Items = month_data[[2]]),
-                    FUN = sum)
-        
-        ggplot(total_expense, aes(x = Items, y = x)) + geom_bar(aes(fill = Items), stat = "identity", width = 0.5) + theme(axis.text.x = element_text(size = 10),
-                                                                                                                           legend.position = "none") + geom_text(aes(label = x), vjust = -0.5, size = 4) + ylab("Expense Amount (in Rs.)") + theme(
-                                                                                                                             panel.background = element_rect(fill = "transparent"),
-                                                                                                                             plot.background = element_rect(fill = "transparent")
-                                                                                                                           ) + labs(x = NULL) + ylim(0, max(total_expense$x + 100))
-      }
-    })
-    
-    #Expense trend line
-    output$trend <- renderPlotly({
-      month_expense <- sheet_data() %>%
-        group_by(month = floor_date(Date, "month")) %>%
-        summarize(Monthly_expense = sum(Price))
-      if (nrow(month_expense)==0){
-        NULL
-      }
-      else{
+  #Expense bar plot
+  output$item_expense <- renderPlot({
+    input$refresh
+    month_data <-
+      sheet_data()[months(sheet_data()[[1]]) %in% input$month, ]
+    if (nrow(month_data) == 0) {
+      NULL
+    }
+    else{
+      total_expense <-
+        aggregate(month_data[[3]],
+                  by = list(Items = month_data[[2]]),
+                  FUN = sum)
+      
+      ggplot(total_expense, aes(x = Items, y = x)) + geom_bar(aes(fill = Items), stat = "identity", width = 0.5) + theme(axis.text.x = element_text(size = 10),
+                                                                                                                         legend.position = "none") + geom_text(aes(label = x), vjust = -0.5, size = 4) + ylab("Expense Amount (in Rs.)") + theme(
+                                                                                                                           panel.background = element_rect(fill = "transparent"),
+                                                                                                                           plot.background = element_rect(fill = "transparent")
+                                                                                                                         ) + labs(x = NULL) + ylim(0, max(total_expense$x + 100))
+    }
+  })
+  
+  #Expense trend line
+  output$trend <- renderPlotly({
+    input$refresh
+    month_expense <- sheet_data() %>%
+      group_by(month = floor_date(Date, "month")) %>%
+      summarize(Monthly_expense = sum(Price))
+    if (nrow(month_expense) == 0) {
+      NULL
+    }
+    else{
       tooltip_text <-
         paste(
           "Month:",
-          format(month_expense$month, format = "%b, %Y")," ",
+          format(month_expense$month, format = "%b, %Y"),
+          " ",
           "Total expense:",
-          paste0("₹", format(month_expense$Monthly_expense, big.mark = ","))
+          paste0(
+            "₹",
+            format(month_expense$Monthly_expense, big.mark = ",")
+          )
         )
-     
+      
       plot_ly(
         month_expense,
         x = ~ month,
@@ -289,77 +301,80 @@ server <- function(input, output, session) {
           paper_bgcolor = "rgba(0,0,0,0)",
           # Transparent background
           plot_bgcolor = "rgba(0,0,0,0)"    # Transparent plot area
-        ) 
-      }
-    })
+        )
+    }
+  })
+  
+  #Valuebox
+  output$current_expense_total <- renderValueBox({
+    input$refresh
+    month_data <-
+      sheet_data()[months(sheet_data()[[1]]) %in% months(Sys.Date()), ]
+    total_expense <- sum(month_data[[3]])
     
-    #Valuebox
-    output$current_expense_total <- renderValueBox({
-      month_data <-
-        sheet_data()[months(sheet_data()[[1]]) %in% months(Sys.Date()),]
-      total_expense <- sum(month_data[[3]])
+    valueBox(
+      value = h1(paste("₹", total_expense)),
+      subtitle = paste("Total expense of", months(Sys.Date())),
+      icon = icon("rupee-sign"),
+      color = "teal"
+    )
+    
+  })
+  
+  output$max_expense_item <- renderValueBox({
+    input$refresh
+    month_data <-
+      sheet_data()[months(sheet_data()[[1]]) %in% months(Sys.Date()), ]
+    if (nrow(month_data) == 0) {
+      valueBox(
+        value = "No Data Found",
+        subtitle = "Highest expense item",
+        icon = icon("shopping-bag"),
+        color = "maroon"
+      )
+    }
+    else{
+      item_total_expense <-
+        aggregate(month_data$Price,
+                  by = list(items = month_data$Item),
+                  FUN = sum)
+      item_total_expense <-
+        item_total_expense %>% filter(x == max(item_total_expense[[2]])) %>% select("items")
+      item_total_expense <- unlist(item_total_expense)
+      item_total_expense <-
+        ifelse(length(item_total_expense) > 1,
+               "Multiple",
+               item_total_expense)
+      
       
       valueBox(
-        value = h1(paste("₹", total_expense)),
-        subtitle = paste("Total expense of", months(Sys.Date())),
-        icon = icon("rupee-sign"),
-        color = "teal"
+        value = h1(item_total_expense),
+        subtitle = "Highest expense item",
+        icon = icon("shopping-bag"),
+        color = "maroon"
       )
-      
-    })
+    }
     
-    output$max_expense_item <- renderValueBox({
-      month_data <-
-        sheet_data()[months(sheet_data()[[1]]) %in% months(Sys.Date()),]
-      if (nrow(month_data) == 0) {
-        valueBox(
-          value = "No Data Found",
-          subtitle = "Highest expense item",
-          icon = icon("shopping-bag"),
-          color = "maroon"
-        )
-      }
-      else{
-        item_total_expense <-
-          aggregate(month_data$Price,
-                    by = list(items = month_data$Item),
-                    FUN = sum)
-        item_total_expense <-
-          item_total_expense %>% filter(x == max(item_total_expense[[2]])) %>% select("items")
-        item_total_expense <- unlist(item_total_expense)
-        item_total_expense <-
-          ifelse(length(item_total_expense) > 1,
-                 "Multiple",
-                 item_total_expense)
-        
-        
-        valueBox(
-          value = h1(item_total_expense),
-          subtitle = "Highest expense item",
-          icon = icon("shopping-bag"),
-          color = "maroon"
-        )
-      }
-      
-    })
-    
-    # Data Table
-    output$data <- renderDataTable({
-      month_data <-
-        sheet_data()[months(sheet_data()[[1]]) %in% input$dt_month,]
-      if (nrow(month_data) == 0) {
-        NULL
-      }
-      else{
-        total_expense <-
-          aggregate(month_data[[3]],
-                    by = list(Items = month_data[[2]]),
-                    FUN = sum)
-        names(total_expense)[2] <- "Total expense"
-        total_expense
-      }
-    })
   })
+  
+  # Data Table
+  output$data <- renderDataTable({
+    input$refresh
+    month_data <-
+      sheet_data()[months(sheet_data()[[1]]) %in% input$dt_month, ]
+    if (nrow(month_data) == 0) {
+      NULL
+    }
+    else{
+      total_expense <-
+        aggregate(month_data[[3]],
+                  by = list(Items = month_data[[2]]),
+                  FUN = sum)
+      names(total_expense)[2] <- "Total expense"
+      total_expense
+    }
+  })
+  
   
   # Tab 2 codes -------------------------------------------------------------
   
@@ -378,64 +393,54 @@ server <- function(input, output, session) {
   })
   
   #Create blank dataframe
-  createSheet <<- data.frame()
+  createSheet <- reactiveVal(NULL)
   
   #Create record for listed items
-  record1 <<- reactive({
-    NULL
-  })
+  record1 <- reactiveVal(NULL)
   
   observe({
     if (input$expenseItem != "Others") {
-      record1 <<- reactive({
-        rec <-
-          list(
-            Date = as.character(as.character(input$date)),
-            Item = input$expenseItem,
-            Price = input$expenseAmount
-          )
-        if (input$expenseAmount != 0 &&
-            is.na(input$expenseAmount) == F)
-          return(rec)
-        else
-          return(NULL)
-      })
+      rec <-
+        list(
+          Date = as.character(input$date),
+          Item = input$expenseItem,
+          Price = input$expenseAmount
+        )
+      if (input$expenseAmount != 0 &&
+          is.na(input$expenseAmount) == F)
+        record1(as.data.frame(rec))
+      else
+        record1(NULL)
     }
     else
-      record1 <<- reactive({
-        NULL
-      })
+      record1(NULL)
   })
   
   #Create record for custom items
-  record2 <<- reactive({
-    NULL
-  })
+  record2 <- reactiveVal(NULL)
+  
   observe({
     if (input$expenseItem == "Others") {
-      record2 <<- reactive({
-        rec <-
-          list(
-            Date = as.character(as.character(input$date)),
-            Item = input$otherExpenseItem,
-            Price = input$expenseAmount
-          )
-        if (input$expenseAmount != 0 &&
-            is.na(input$expenseAmount) == F)
-          return(rec)
-        else
-          return(NULL)
-      })
+      rec <-
+        list(
+          Date = as.character(input$date),
+          Item = input$otherExpenseItem,
+          Price = input$expenseAmount
+        )
+      if (input$expenseAmount != 0 &&
+          is.na(input$expenseAmount) == F)
+        record2(as.data.frame(rec))
+      else
+        record2(NULL)
+      
     }
     else
-      record2 <<- reactive({
-        NULL
-      })
+      record2(NULL)
   })
   
   #Combine records with blank dataframe
   sheet <- function() {
-    createSheet <<- rbind(createSheet, record1(), record2())
+    createSheet(rbind(createSheet(), record1(), record2()))
   }
   
   
@@ -445,7 +450,7 @@ server <- function(input, output, session) {
   #Preview button previews entries made
   observeEvent(input$preview, {
     output$preview <- renderDataTable({
-      createSheet
+      createSheet()
     })
     updateTabItems(session, "tabs", "upload")
   })
@@ -454,7 +459,7 @@ server <- function(input, output, session) {
   
   #Add record to sheet
   observeEvent(input$add, {
-    if (dim(createSheet)[1] == 0) {
+    if (is.null(createSheet())) {
       showModal(modalDialog(title = "Status", "Nothing to add. Please enter data first."))
     }
     else{
@@ -466,23 +471,29 @@ server <- function(input, output, session) {
         NULL
       })
       if (is.null(form)) {
-        shinyalert("Oops!",
-                   "Something went wrong! Please try again.",
-                   type = "error",confirmButtonCol = "#5C8374")
+        shinyalert(
+          "Oops!",
+          "Something went wrong! Please try again.",
+          type = "error",
+          confirmButtonCol = "#5C8374"
+        )
       }
       else{
-        sheet_append(data = createSheet,
+        sheet_append(data = createSheet(),
                      ss = form,
                      sheet = 'Sheet1')
         
-        shinyalert("Success!",
-                   "Your record has been successfully added",
-                   type = "success",confirmButtonCol = "#5C8374")
+        shinyalert(
+          "Success!",
+          "Your record has been successfully added",
+          type = "success",
+          confirmButtonCol = "#5C8374"
+        )
         
         output$preview <- renderDataTable({
           NULL
         })
-        createSheet <<- subset(createSheet, F)
+        createSheet(subset(createSheet(), F))
       }
     }
   })
