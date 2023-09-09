@@ -1,5 +1,6 @@
 # Expense Dashboard
 A dashboard developed in R Shiny to keep track of all the expenses.
+<a href=https://sankhadeep-dutta.shinyapps.io/Home_expense_dashboard>Click here</a> to open the dashboard.
 
 ![App Screenshot](https://github.com/sankhadeepdutta/Expense_Dashboard/blob/master/Dashboard%20screenshots/Home_expense_ss.png?raw=true)
 
